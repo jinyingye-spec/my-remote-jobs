@@ -1,59 +1,60 @@
 import feedparser
 import datetime
 import re
+import pandas as pd
 
+# 聚焦全球顶级远程/兼职数据源
 SOURCES = {
     "We Work Remotely": "https://weworkremotely.com/remote-jobs.rss",
-    "Remotive": "https://remotive.com/remote-jobs/feed"
+    "Remotive": "https://remotive.com/remote-jobs/feed",
+    "Working Nomads": "https://www.workingnomads.com/jobsfeed"
 }
 
 def clean_text(text):
-    # 去除 HTML 标签，方便提取纯文本信息
     return re.sub('<[^<]+?>', '', text)
 
 def fetch_and_save():
+    all_jobs = []
     now = datetime.datetime.now() + datetime.timedelta(hours=8)
-    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
-
-    content = f"# 🌍 海外远程兼职/合同工列表\n\n"
-    content += f"> 🤖 机器人最后更新于: `{dt_string}` (北京时间)\n\n"
-    # 增加了：岗位类型、工作城市、福利待遇
-    content += "| 来源平台 | 职位名称 | 岗位类型 | 工作城市/限制 | 福利待遇/薪资 | 链接 |\n"
-    content += "| :--- | :--- | :--- | :--- | :--- | :--- |\n"
     
     for name, url in SOURCES.items():
         feed = feedparser.parse(url)
-        
-        for entry in feed.entries[:15]:
-            title = entry.title.replace("|", "-")
-            link = entry.link
-            
-            # 提取描述内容进行分析
+        for entry in feed.entries:
+            title = entry.title
             desc = clean_text(entry.summary) if 'summary' in entry else ""
             
-            # 1. 尝试提取岗位类型 (Part-time / Full-time / Contract)
-            job_type = "Remote"
-            if "part-time" in desc.lower() or "part-time" in title.lower():
-                job_type = "⏱️ Part-time"
-            elif "contract" in desc.lower() or "contract" in title.lower():
-                job_type = "📄 Contract"
-            
-            # 2. 尝试从 Remotive 这种自带分类的源提取城市/地点限制
-            location = "Anywhere"
-            if 'location' in entry:
-                location = entry.location
-            elif "worldwide" in desc.lower():
-                location = "🌎 Worldwide"
-            
-            # 3. 尝试提取薪资或待遇 (寻找 $ 符号)
-            benefits = "查看详情"
-            salary_match = re.search(r'\$\d+k? - \$\d+k?|\$\d+[\d,]*', desc)
-            if salary_match:
-                benefits = f"💰 {salary_match.group()}"
-            elif "vacation" in desc.lower() or "stock" in desc.lower():
-                benefits = "🎁 含福利"
+            # --- 核心逻辑：聚焦远程 & 兼职 ---
+            # 只抓取标题或描述里包含这些词的岗位
+            target_keywords = ["remote", "part-time", "contract", "freelance", "anywhere"]
+            if any(word in (title + desc).lower() for word in target_keywords):
+                
+                # 提取薪资（正则匹配）
+                salary = "Check website"
+                salary_match = re.search(r'\$\d+k? - \$\d+k?|\$\d+[\d,]*', desc)
+                if salary_match:
+                    salary = salary_match.group()
 
-            content += f"| {name} | {title} | {job_type} | {location} | {benefits} | [申请]({link}) |\n"
+                all_jobs.append({
+                    "平台": name,
+                    "职位名称": title,
+                    "地点限制": entry.get('location', 'Global/Remote'),
+                    "薪资/待遇": salary,
+                    "发布时间": entry.published[:16] if 'published' in entry else "N/A",
+                    "申请链接": entry.link
+                })
+
+    # 1. 生成 Excel
+    df = pd.DataFrame(all_jobs)
+    df.to_excel("remote_jobs_list.xlsx", index=False)
+
+    # 2. 生成 README 预览表格
+    content = f"# 🌍 海外远程职位列表 (含 Excel 下载)\n\n"
+    content += f"更新时间: `{now.strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
+    content += f"📊 [点此下载生成的 Excel 文件](./remote_jobs_list.xlsx)\n\n"
+    content += "| 平台 | 职位名称 | 薪资 | 链接 |\n| :--- | :--- | :--- | :--- |\n"
+    
+    for job in all_jobs[:20]: # 网页只预览前20个，剩下的看Excel
+        content += f"| {job['平台']} | {job['职位名称']} | {job['薪资/待遇']} | [查看]({job['申请链接']}) |\n"
 
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
