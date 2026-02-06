@@ -23,7 +23,7 @@ jobs:
           python-version: '3.x'
 
       - name: 安装依赖
-        run: pip install feedparser
+        run: pip install feedparser pandas openpyxl
 
       - name: 运行抓取脚本
         run: python fetch_jobs.py
