@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: 检查代码
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # 确保能获取到历史文件
 
       - name: 安装 Python
         uses: actions/setup-python@v2
