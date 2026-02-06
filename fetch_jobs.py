@@ -1,25 +1,45 @@
 import feedparser
-import os
+import datetime
 
-# 定义我们要抓取的 RSS 源（这些都是免费公开的）
+# 数据源
 SOURCES = {
     "We Work Remotely": "https://weworkremotely.com/remote-jobs.rss",
     "Remotive": "https://remotive.com/remote-jobs/feed"
 }
 
 def fetch_and_save():
-    content = "# 🌍 海外远程兼职列表\n\n更新时间: {}\n\n".format(os.popen('date').read())
+    # 获取当前北京时间 (UTC+8)
+    now = datetime.datetime.now() + datetime.timedelta(hours=8)
+    dt_string = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    # 准备 Markdown 头部
+    content = f"# 🌍 海外远程兼职/合同工列表\n\n"
+    content += f"> 🤖 机器人最后更新于: `{dt_string}` (北京时间)\n\n"
+    content += "| 来源平台 | 职位名称 | 发布时间 | 申请链接 |\n"
+    content += "| :--- | :--- | :--- | :--- |\n"
     
+    found_jobs = False
+
     for name, url in SOURCES.items():
-        content += f"## 📢 来自 {name}\n\n"
         feed = feedparser.parse(url)
         
-        # 只取前 10 条最新的
-        for entry in feed.entries[:10]:
-            content += f"- **[{entry.title}]({entry.link})**\n"
-            content += f"  *发布日期: {entry.published}*\n\n"
-    
-    # 把结果写进 README.md
+        for entry in feed.entries[:15]:
+            title = entry.title
+            # 简单的关键词筛选（可选，如果想看全部，可以删掉下面这行 if 判断）
+            # if any(word in title.lower() for word in ["remote", "part-time", "contract", "freelance"]):
+            
+            # 清理标题中的逗号，防止破坏表格格式
+            clean_title = title.replace("|", "-")
+            link = entry.link
+            pub_date = entry.published[:16] # 截取日期部分
+            
+            content += f"| {name} | {clean_title} | {pub_date} | [点击申请]({link}) |\n"
+            found_jobs = True
+
+    if not found_jobs:
+        content += "| N/A | 暂时没有发现新职位 | - | - |\n"
+
+    # 写入文件
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(content)
 
