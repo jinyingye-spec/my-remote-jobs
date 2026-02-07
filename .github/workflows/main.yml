@@ -1,38 +1,7 @@
 name: Update Jobs
 
-on:
-  schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+on: schedule: - cron: '0 0 * * *' workflow_dispatch:
 
-# --- 关键修改点：显式增加写权限 ---
-permissions:
-  contents: write
-# ------------------------------
+permissions: contents: write
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检查代码
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0 # 确保能获取到历史文件
-
-      - name: 安装 Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
-
-      - name: 安装依赖
-        run: pip install feedparser pandas openpyxl requests
-
-      - name: 运行抓取脚本
-        run: python fetch_jobs.py
-      
-      - name: 提交并更新页面
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add README.md remote_jobs_list.xlsx  # 关键：要把 excel 文件也加上
-          git diff --quiet && git diff --staged --quiet || (git commit -m "更新职位列表和Excel" && git push)
+jobs: build: runs-on: ubuntu-latest steps: - name: 检查代码 uses: actions/checkout@v2
