@@ -35,20 +35,33 @@ def scrape_weworkremotely():
         return jobs
     except: return []
 
-def scrape_workingnomads():
-    print("正在爬取 Working Nomads...")
-    url = "https://www.workingnomads.com/jobs?category=development"
+def scrape_weworkremotely():
+    print("正在爬取 We Work Remotely...")
+    # 搜索 developer 肯定有结果，china 可能搜不到
+    url = "https://weworkremotely.com/remote-jobs/search?term=developer"
     try:
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         jobs = []
-        for item in soup.select('.job'):
-            title = item.find('h2').text.strip()
-            company = item.find('div', class_='company').text.strip()
-            # Working Nomads 这种通常是 Global
-            jobs.append({"职位": title, "公司": company, "地点": "Global", "来源": "Working Nomads", "链接": "https://www.workingnomads.com" + item.find('a')['href']})
+        # WWR 的真实结构：寻找所有 class 包含 job 的 li
+        items = soup.find_all('li', class_='feature') + soup.find_all('li', class_='')
+        for item in items:
+            title_tag = item.find('span', class_='title')
+            if not title_tag: continue
+            
+            title = title_tag.text.strip()
+            company = item.find('span', class_='company').text.strip() if item.find('span', class_='company') else "N/A"
+            region = item.find('span', class_='region').text.strip() if item.find('span', class_='region') else "Global"
+            link_tag = item.find('a', recursive=False)
+            if not link_tag: continue
+            link = "https://weworkremotely.com" + link_tag['href']
+            
+            jobs.append({"职位": title, "公司": company, "地点": region, "来源": "WWR", "链接": link})
+        print(f"WWR 抓取成功，找到 {len(jobs)} 条")
         return jobs
-    except: return []
+    except Exception as e:
+        print(f"WWR 报错: {e}")
+        return []
 
 def scrape_justremote():
     print("正在爬取 JustRemote...")
