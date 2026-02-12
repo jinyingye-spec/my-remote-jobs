@@ -38,17 +38,6 @@ def scrape_weworkremotely():
         print(f"WWR 抓取出错: {e}")
         return []
 
-# --- 2. 地点过滤逻辑 ---
-def is_china_friendly(location_str):
-    if not location_str: return True # 没写地点的通常是 Global
-    loc = location_str.lower()
-    keywords = ['china', 'asia', 'anywhere', 'worldwide', 'global', 'remote', 'distributed']
-    exclude_keywords = ['us only', 'usa only', 'uk only', 'europe only', 'north america', 'canada only']
-    
-    is_match = any(word in loc for word in keywords)
-    is_excluded = any(word in loc for word in exclude_keywords)
-    return is_match and not is_excluded
-
 # --- 3. 更新 README 逻辑 ---
 def update_readme(jobs):
     if not jobs:
