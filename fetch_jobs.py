@@ -6,18 +6,21 @@ import os
 import re
 import time
 
-# 通用请求头，防止被封
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+# --- 基础配置 ---
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+}
 
 def is_china_friendly(location_str):
+    """筛选允许中国/亚洲/全球远程的职位"""
     if not location_str: return True
     loc = location_str.lower()
-    keywords = ['china', 'asia', 'anywhere', 'worldwide', 'global', 'remote', 'distributed']
-    exclude_keywords = ['us only', 'usa only', 'uk only', 'europe only', 'north america']
+    keywords = ['china', 'asia', 'anywhere', 'worldwide', 'global', 'remote', 'distributed', 'apac']
+    exclude_keywords = ['us only', 'usa only', 'uk only', 'europe only', 'north america', 'canada only']
     return any(word in loc for word in keywords) and not any(word in loc for word in exclude_keywords)
 
-# --- 各大网站爬取逻辑 ---
-
+# --- 1. We Work Remotely 抓取逻辑 ---
 def scrape_weworkremotely():
     print("正在爬取 We Work Remotely...")
     url = "https://weworkremotely.com/remote-jobs/search?term=developer"
@@ -25,60 +28,40 @@ def scrape_weworkremotely():
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         jobs = []
-        for item in soup.select('.list-container section ul li'):
-            if 'view-all' in item.get('class', []): continue
-            title = item.find('span', class_='title').text.strip() if item.find('span', class_='title') else "N/A"
-            company = item.find('span', class_='company').text.strip() if item.find('span', class_='company') else "N/A"
-            region = item.find('span', class_='region').text.strip() if item.find('span', class_='region') else "Global"
-            link = "https://weworkremotely.com" + item.find('a', recursive=False)['href']
-            jobs.append({"职位": title, "公司": company, "地点": region, "来源": "WWR", "链接": link})
-        return jobs
-    except: return []
-
-def scrape_weworkremotely():
-    print("正在爬取 We Work Remotely...")
-    # 改用这个更宽泛的类别 URL，不带 term 过滤
-    url = "https://weworkremotely.com/remote-jobs/search?term=developer"
-    try:
-        # 增加 headers 模拟真实浏览器
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        }
-        res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        jobs = []
-        
-        # WWR 的职位通常在 section 下的 li 标签里，带 .feature 或没有类名
-        # 尝试寻找所有含有 job 信息的 <a> 标签
+        # 定位所有职位列表中的链接
         links = soup.select('section.jobs article ul li a')
-        
         for a in links:
-            # 排除“查看更多”的链接
             if 'view-all' in a.get('class', []): continue
-            
-            # 找到父级 li 获取详细信息
             li = a.find_parent('li')
             title = li.find('span', class_='title').text.strip() if li.find('span', class_='title') else "N/A"
             company = li.find('span', class_='company').text.strip() if li.find('span', class_='company') else "N/A"
             region = li.find('span', class_='region').text.strip() if li.find('span', class_='region') else "Global"
-            
-            job_url = "https://weworkremotely.com" + a['href']
-            
-            jobs.append({
-                "职位": title, 
-                "公司": company, 
-                "地点": region, 
-                "来源": "WWR", 
-                "链接": job_url
-            })
-        
-        print(f"WWR 抓取成功，实际找到 {len(jobs)} 条")
+            jobs.append({"职位": title, "公司": company, "地点": region, "来源": "WWR", "链接": "https://weworkremotely.com" + a['href']})
+        print(f"WWR 抓取成功: {len(jobs)} 条")
         return jobs
     except Exception as e:
-        print(f"WWR 报错详情: {e}")
-        return []
+        print(f"WWR 出错: {e}"); return []
 
+# --- 2. Working Nomads 抓取逻辑 ---
+def scrape_workingnomads():
+    print("正在爬取 Working Nomads...")
+    url = "https://www.workingnomads.com/jobs?category=development"
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        jobs = []
+        items = soup.select('.job-card') # 根据该网站最新结构调整
+        for item in items:
+            title = item.find('h2').text.strip() if item.find('h2') else "N/A"
+            company = item.find('div', class_='company').text.strip() if item.find('div', class_='company') else "N/A"
+            # Working Nomads 默认大多数是 Global
+            jobs.append({"职位": title, "公司": company, "地点": "Global", "来源": "Working Nomads", "链接": "https://www.workingnomads.com" + item.find('a')['href']})
+        print(f"Working Nomads 抓取成功: {len(jobs)} 条")
+        return jobs
+    except Exception as e:
+        print(f"Working Nomads 出错: {e}"); return []
+
+# --- 3. JustRemote 抓取逻辑 ---
 def scrape_justremote():
     print("正在爬取 JustRemote...")
     url = "https://justremote.co/remote-developer-jobs"
@@ -86,56 +69,60 @@ def scrape_justremote():
         res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         jobs = []
-        for item in soup.select('.job-item'):
-            title = item.find('h3').text.strip()
-            company = item.find('div', class_='company').text.strip()
-            # 这里的地点通常在特定的 span 里
+        items = soup.select('.job-item')
+        for item in items:
+            title = item.find('h3').text.strip() if item.find('h3') else "N/A"
+            company = item.find('div', class_='company').text.strip() if item.find('div', class_='company') else "N/A"
             jobs.append({"职位": title, "公司": company, "地点": "Remote", "来源": "JustRemote", "链接": "https://justremote.co" + item.find('a')['href']})
+        print(f"JustRemote 抓取成功: {len(jobs)} 条")
         return jobs
-    except: return []
+    except Exception as e:
+        print(f"JustRemote 出错: {e}"); return []
 
-# --- 存储与更新逻辑 (保持不变但确保被调用) ---
-
+# --- 4. 保存与更新流程 ---
 def save_and_update(all_jobs):
     if not all_jobs:
-        print("全部抓取结果为空，请检查网络或网站结构")
+        print("所有网站均未抓取到数据，跳过更新。")
         return
 
-    # 1. 过滤 & 每个网站取 8 条
-    df = pd.DataFrame(all_jobs)
+    # 过滤地点并取每个来源的前8条
     filtered_jobs = [j for j in all_jobs if is_china_friendly(j['地点'])]
     
-    # 按来源分组取前8条
     final_list = []
     sources = set([j['来源'] for j in filtered_jobs])
     for s in sources:
         final_list.extend([j for j in filtered_jobs if j['来源'] == s][:8])
 
     df_final = pd.DataFrame(final_list)
-
-    # 2. 保存 Excel
-    file_name = "remote_jobs_list.xlsx"
     sheet_name = datetime.now().strftime("%Y-%m-%d")
+
+    # 更新 Excel
+    file_name = "remote_jobs_list.xlsx"
     if os.path.exists(file_name):
         with pd.ExcelWriter(file_name, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             df_final.to_excel(writer, sheet_name=sheet_name, index=False)
     else:
         df_final.to_excel(file_name, sheet_name=sheet_name, index=False)
 
-    # 3. 更新 README
+    # 更新 README
     if os.path.exists("README.md"):
         with open("README.md", "r", encoding="utf-8") as f:
             content = f.read()
         md_table = df_final.to_markdown(index=False)
         start_tag, end_tag = "", ""
-        new_content = f"{start_tag}\n\n### 更新日期: {sheet_name}\n\n{md_table}\n\n{end_tag}"
-        updated_content = re.sub(f"{re.escape(start_tag)}.*?{re.escape(end_tag)}", new_content, content, flags=re.DOTALL)
-        with open("README.md", "w", encoding="utf-8") as f:
-            f.write(updated_content)
-    print("Excel 和 README 已更新成功！")
+        if start_tag in content:
+            pattern = f"{re.escape(start_tag)}.*?{re.escape(end_tag)}"
+            new_content = f"{start_tag}\n\n### 更新日期: {sheet_name}\n\n{md_table}\n\n{end_tag}"
+            updated_content = re.sub(pattern, new_content, content, flags=re.DOTALL)
+            with open("README.md", "w", encoding="utf-8") as f:
+                f.write(updated_content)
+        print("Excel 和 README 已同步更新！")
 
+# --- 主程序入口 ---
 if __name__ == "__main__":
     combined_jobs = []
+    
+    # 依次调用函数，确保每个函数在上方都有定义
     combined_jobs += scrape_weworkremotely()
     time.sleep(2)
     combined_jobs += scrape_workingnomads()
