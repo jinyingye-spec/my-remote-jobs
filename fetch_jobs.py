@@ -21,44 +21,43 @@ def is_china_friendly(title, location):
 # --- 1. WWR (RSS 版) ---
 def scrape_wwr_rss():
     print("正在通过 RSS 爬取 We Work Remotely...")
-    url = "https://weworkremotely.com/categories/remote-software-development-jobs.rss"
-    try:
-        res = requests.get(url, timeout=15)
-        soup = BeautifulSoup(res.text, 'xml') # 使用 XML 解析器
-        items = soup.find_all('item')
-        jobs = []
-        for item in items:
-            title = item.title.text
-            link = item.link.text
-            # RSS 通常在描述里包含公司名
-            company = item.find('dc:creator').text if item.find('dc:creator') else "Remote Co"
-            jobs.append({"职位": title, "公司": company, "地点": "Global/Remote", "来源": "WWR", "链接": link})
-        print(f"WWR RSS 抓取成功: {len(jobs)} 条")
-        return jobs
-    except Exception as e:
-        print(f"WWR RSS 出错: {e}"); return []
-
-# --- 2. Working Nomads (RSS 版) ---
-def scrape_wn_rss():
-    print("正在通过 RSS 爬取 Working Nomads...")
-    url = "https://www.workingnomads.com/jobsapi/rss/jobs?category=development"
+    # 换成这个最全的源
+    url = "https://weworkremotely.com/remote-jobs.rss"
     try:
         res = requests.get(url, timeout=15)
         soup = BeautifulSoup(res.text, 'xml')
         items = soup.find_all('item')
         jobs = []
-        for item in items:
+        for item in items[:20]: # 取最新的20个
             jobs.append({
                 "职位": item.title.text,
-                "公司": "Working Nomads",
+                "公司": "WWR",
                 "地点": "Remote",
-                "来源": "Working Nomads",
+                "来源": "WWR",
                 "链接": item.link.text
             })
-        print(f"Working Nomads RSS 抓取成功: {len(jobs)} 条")
         return jobs
-    except Exception as e:
-        print(f"WN RSS 出错: {e}"); return []
+    except: return []
+
+def scrape_upwork_rss():
+    print("正在爬取 Upwork 招聘...")
+    # 这是一个公开的 Upwork 搜索 RSS 示例（搜 Web Development）
+    url = "https://www.upwork.com/ab/feed/jobs/rss?q=web+development"
+    try:
+        res = requests.get(url, timeout=15)
+        soup = BeautifulSoup(res.text, 'xml')
+        items = soup.find_all('item')
+        jobs = []
+        for item in items[:10]:
+            jobs.append({
+                "职位": item.title.text[:50] + "...", # 标题太长截断
+                "公司": "Upwork Client",
+                "地点": "Worldwide",
+                "来源": "Upwork",
+                "链接": item.link.text
+            })
+        return jobs
+    except: return []
 
 # --- 核心处理与更新 (增强鲁棒性) ---
 def save_and_update(all_jobs):
@@ -68,8 +67,7 @@ def save_and_update(all_jobs):
         print("警告：未抓到实时数据，生成测试行。")
 
     # 过滤
-    final_list = [j for j in all_jobs if is_china_friendly(j['职位'], j['地点'])]
-    if not final_list: final_list = all_jobs[:10] # 如果过滤完没了，就取前10个保底
+    final_list = all_jobs
 
     df_final = pd.DataFrame(final_list)
     sheet_name = datetime.now().strftime("%Y-%m-%d")
