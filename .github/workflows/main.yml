@@ -29,19 +29,16 @@ jobs:
         run: python fetch_jobs.py
 
       - name: Commit and Push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 确保拉取最新更改，防止冲突
-          git pull origin main
-
-          git add remote_jobs_list.xlsx README.md
-          
-          # 只有在有变动时才提交
+          git add README.md remote_jobs_list.xlsx
+          # 只有在确实有文件变动时才提交，防止报错
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "Auto-update: $(date +'%Y-%m-%d')"
-            git push
+            git push origin main
           else
-            echo "No changes to commit"
+            echo "No changes detected"
           fi
