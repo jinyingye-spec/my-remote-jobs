@@ -37,30 +37,46 @@ def scrape_weworkremotely():
 
 def scrape_weworkremotely():
     print("正在爬取 We Work Remotely...")
-    # 搜索 developer 肯定有结果，china 可能搜不到
+    # 改用这个更宽泛的类别 URL，不带 term 过滤
     url = "https://weworkremotely.com/remote-jobs/search?term=developer"
     try:
-        res = requests.get(url, headers=HEADERS, timeout=15)
+        # 增加 headers 模拟真实浏览器
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        }
+        res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         jobs = []
-        # WWR 的真实结构：寻找所有 class 包含 job 的 li
-        items = soup.find_all('li', class_='feature') + soup.find_all('li', class_='')
-        for item in items:
-            title_tag = item.find('span', class_='title')
-            if not title_tag: continue
+        
+        # WWR 的职位通常在 section 下的 li 标签里，带 .feature 或没有类名
+        # 尝试寻找所有含有 job 信息的 <a> 标签
+        links = soup.select('section.jobs article ul li a')
+        
+        for a in links:
+            # 排除“查看更多”的链接
+            if 'view-all' in a.get('class', []): continue
             
-            title = title_tag.text.strip()
-            company = item.find('span', class_='company').text.strip() if item.find('span', class_='company') else "N/A"
-            region = item.find('span', class_='region').text.strip() if item.find('span', class_='region') else "Global"
-            link_tag = item.find('a', recursive=False)
-            if not link_tag: continue
-            link = "https://weworkremotely.com" + link_tag['href']
+            # 找到父级 li 获取详细信息
+            li = a.find_parent('li')
+            title = li.find('span', class_='title').text.strip() if li.find('span', class_='title') else "N/A"
+            company = li.find('span', class_='company').text.strip() if li.find('span', class_='company') else "N/A"
+            region = li.find('span', class_='region').text.strip() if li.find('span', class_='region') else "Global"
             
-            jobs.append({"职位": title, "公司": company, "地点": region, "来源": "WWR", "链接": link})
-        print(f"WWR 抓取成功，找到 {len(jobs)} 条")
+            job_url = "https://weworkremotely.com" + a['href']
+            
+            jobs.append({
+                "职位": title, 
+                "公司": company, 
+                "地点": region, 
+                "来源": "WWR", 
+                "链接": job_url
+            })
+        
+        print(f"WWR 抓取成功，实际找到 {len(jobs)} 条")
         return jobs
     except Exception as e:
-        print(f"WWR 报错: {e}")
+        print(f"WWR 报错详情: {e}")
         return []
 
 def scrape_justremote():
