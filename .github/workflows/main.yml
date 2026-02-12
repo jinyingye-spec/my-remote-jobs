@@ -2,8 +2,12 @@ name: Daily Job Scraper
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天凌晨(UTC)自动执行
-  workflow_dispatch:      # 允许手动触发执行
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+# --- 关键修改 1: 开启写入权限 ---
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,15 +23,25 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 pandas openpyxl
+          pip install requests beautifulsoup4 pandas openpyxl tabulate  # --- 关键修改 2: 增加 tabulate ---
 
       - name: Run scraper
         run: python fetch_jobs.py
 
       - name: Commit and Push changes
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add remote_jobs_list.xlsx
-          git commit -m "Update job list: $(date +'%Y-%m-%d')" || exit 0
-          git push
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 确保拉取最新更改，防止冲突
+          git pull origin main
+
+          git add remote_jobs_list.xlsx README.md
+          
+          # 只有在有变动时才提交
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Auto-update: $(date +'%Y-%m-%d')"
+            git push
+          else
+            echo "No changes to commit"
+          fi
