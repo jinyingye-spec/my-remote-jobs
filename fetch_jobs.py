@@ -26,20 +26,42 @@ def scrape_weworkremotely():
         })
     return jobs
 
-def save_to_excel(new_data):
+def is_china_friendly(location_str):
+    """判断职位是否允许在中国远程"""
+    if not location_str:
+        return False
+    
+    # 转换为小写进行模糊匹配
+    loc = location_str.lower()
+    keywords = ['china', 'asia', 'anywhere', 'worldwide', 'global', 'remote', 'distributed']
+    
+    # 排除掉明确限制在北美、欧洲等地区的职位
+    exclude_keywords = ['us only', 'usa only', 'uk only', 'europe only', 'north america']
+    
+    # 逻辑：包含关键词 且 不包含排除词
+    is_match = any(word in loc for word in keywords)
+    is_excluded = any(word in loc for word in exclude_keywords)
+    
+    return is_match and not is_excluded
+
+def update_readme(jobs):
+    df = pd.DataFrame(jobs)
+    # 将全部符合条件的 40+ 条数据转成 Markdown
+    md_table = df.to_markdown(index=False)
+    
+    # ... (使用上个回答中的 re.sub 逻辑替换 README 中的 部分)
+
+def save_to_excel(jobs):
     file_name = "remote_jobs_list.xlsx"
-    sheet_name = datetime.now().strftime("%Y-%m-%d") # 用日期作为Sheet名
-    
-    df = pd.DataFrame(new_data)
-    
-    # 如果文件已存在，使用 append 模式添加新 Sheet
+    sheet_name = datetime.now().strftime("%Y-%m-%d")
+    df = pd.DataFrame(jobs)
+
     if os.path.exists(file_name):
+        # mode='a' 是追加模式，if_sheet_exists='replace' 指如果今天已经跑过一次了，就替换今天的 sheet
         with pd.ExcelWriter(file_name, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             df.to_excel(writer, sheet_name=sheet_name, index=False)
     else:
-        # 第一次创建文件
         df.to_excel(file_name, sheet_name=sheet_name, index=False)
-    print(f"数据已更新至 Sheet: {sheet_name}")
 
 if __name__ == "__main__":
     # 这里可以循环调用不同网站的爬虫函数
