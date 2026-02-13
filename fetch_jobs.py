@@ -6,95 +6,108 @@ import os
 import re
 import time
 
-# --- 逻辑筛选 ---
-def is_china_friendly(title, location):
-    text = (title + " " + (location if location else "")).lower()
-    # 关键词：包含这些词之一
-    keywords = ['china', 'asia', 'anywhere', 'worldwide', 'global', 'remote', 'apac']
-    # 排除词：包含这些词则剔除
-    exclude = ['us only', 'usa only', 'uk only', 'europe only', 'north america', 'canada only']
-    
-    match = any(word in text for word in keywords)
-    excluded = any(word in text for word in exclude)
-    return match and not excluded
+# --- 1. 基础配置 ---
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
-# --- 1. WWR (RSS 版) ---
+# --- 2. 爬取函数 (统一采用 RSS 模式，最稳定) ---
+
 def scrape_wwr_rss():
     print("正在通过 RSS 爬取 We Work Remotely...")
-    # 换成这个最全的源
     url = "https://weworkremotely.com/remote-jobs.rss"
+    jobs = []
     try:
         res = requests.get(url, timeout=15)
+        # 使用简单的正则或内置解析，减少对 lxml 的依赖报错
         soup = BeautifulSoup(res.text, 'xml')
         items = soup.find_all('item')
-        jobs = []
-        for item in items[:20]: # 取最新的20个
+        for item in items[:15]: # 取前15条
             jobs.append({
-                "职位": item.title.text,
+                "职位": item.title.text.strip(),
                 "公司": "WWR",
                 "地点": "Remote",
                 "来源": "WWR",
-                "链接": item.link.text
+                "链接": item.link.text.strip()
             })
-        return jobs
-    except: return []
+    except Exception as e:
+        print(f"WWR RSS 抓取失败: {e}")
+    return jobs
 
 def scrape_upwork_rss():
-    print("正在爬取 Upwork 招聘...")
-    # 这是一个公开的 Upwork 搜索 RSS 示例（搜 Web Development）
-    url = "https://www.upwork.com/ab/feed/jobs/rss?q=web+development"
+    print("正在通过 RSS 爬取 Upwork...")
+    # 搜索 'python' 相关的远程职位
+    url = "https://www.upwork.com/ab/feed/jobs/rss?q=python&sort=recency"
+    jobs = []
     try:
-        res = requests.get(url, timeout=15)
+        res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'xml')
         items = soup.find_all('item')
-        jobs = []
         for item in items[:10]:
             jobs.append({
-                "职位": item.title.text[:50] + "...", # 标题太长截断
+                "职位": item.title.text.strip()[:60] + "...",
                 "公司": "Upwork Client",
                 "地点": "Worldwide",
                 "来源": "Upwork",
-                "链接": item.link.text
+                "链接": item.link.text.strip()
             })
-        return jobs
-    except: return []
+    except Exception as e:
+        print(f"Upwork RSS 抓取失败: {e}")
+    return jobs
 
-# --- 核心处理与更新 (增强鲁棒性) ---
+# --- 3. 核心保存逻辑 ---
+
 def save_and_update(all_jobs):
     if not all_jobs:
-        # 如果还是没抓到，造一个“系统通知”职位，证明流程是通的
-        all_jobs = [{"职位": "工作流运行正常", "公司": "System", "地点": "Everywhere", "来源": "System", "链接": "https://github.com"}]
-        print("警告：未抓到实时数据，生成测试行。")
+        # 如果啥也没抓到，生成一条保底数据，防止 Action 报错
+        all_jobs = [{"职位": "暂无新职位 (检查源)", "公司": "-", "地点": "-", "来源": "System", "链接": "#"}]
 
-    # 过滤
-    final_list = all_jobs
+    df = pd.DataFrame(all_jobs)
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
-    df_final = pd.DataFrame(final_list)
-    sheet_name = datetime.now().strftime("%Y-%m-%d")
-
-    # Excel
+    # A. 保存到 Excel
     file_name = "remote_jobs_list.xlsx"
-    if os.path.exists(file_name):
-        with pd.ExcelWriter(file_name, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-            df_final.to_excel(writer, sheet_name=sheet_name, index=False)
-    else:
-        df_final.to_excel(file_name, sheet_name=sheet_name, index=False)
+    try:
+        if os.path.exists(file_name):
+            with pd.ExcelWriter(file_name, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+                df.to_excel(writer, sheet_name=today_str, index=False)
+        else:
+            df.to_excel(file_name, sheet_name=today_str, index=False)
+    except Exception as e:
+        print(f"Excel 保存失败: {e}")
 
-    # README
+    # B. 更新 README
     if os.path.exists("README.md"):
         with open("README.md", "r", encoding="utf-8") as f:
             content = f.read()
-        md_table = df_final.to_markdown(index=False)
+        
+        # 将职位转为 Markdown 表格
+        md_table = df.to_markdown(index=False)
         start_tag, end_tag = "", ""
-        if start_tag in content:
-            new_block = f"{start_tag}\n\n### 最后更新: {sheet_name}\n\n{md_table}\n\n{end_tag}"
-            updated_content = re.sub(f"{re.escape(start_tag)}.*?{re.escape(end_tag)}", new_block, content, flags=re.DOTALL)
+        
+        if start_tag in content and end_tag in content:
+            new_block = f"{start_tag}\n\n### 📅 更新日期: {today_str}\n\n{md_table}\n\n{end_tag}"
+            # 使用正则替换，确保只替换一对标签之间的内容
+            pattern = f"{re.escape(start_tag)}.*?{re.escape(end_tag)}"
+            updated_content = re.sub(pattern, new_block, content, flags=re.DOTALL)
+            
             with open("README.md", "w", encoding="utf-8") as f:
                 f.write(updated_content)
-    print("🎉 更新任务全部完成！")
+            print("✅ README.md 更新成功！")
+        else:
+            print("❌ 错误：README.md 中找不到暗号标签！")
+
+# --- 4. 运行入口 (严格对应上面的函数名) ---
 
 if __name__ == "__main__":
-    data = []
-    data += scrape_wwr_rss()
-    data += scrape_wn_rss()
-    save_and_update(data)
+    print(f"--- 任务启动: {datetime.now()} ---")
+    combined_data = []
+    
+    # 只调用上面定义过的函数
+    combined_data += scrape_wwr_rss()
+    time.sleep(2)
+    combined_data += scrape_upwork_rss()
+    
+    # 执行保存
+    save_and_update(combined_data)
+    print("--- 任务结束 ---")
