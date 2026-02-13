@@ -24,8 +24,9 @@ def scrape_wwr():
     print(">>> 正在启动 WWR 抓取...")
     try:
         res = requests.get("https://weworkremotely.com/remote-jobs.rss", timeout=15)
-        soup = BeautifulSoup(res.text, 'xml')
-        items = soup.find_all('item')[:10] # 强制：只取前 10
+        # 将 'xml' 改为 'xml' 或 'html.parser'，但前提是安装了 lxml
+        soup = BeautifulSoup(res.text, 'xml') 
+        items = soup.find_all('item')[:10]
         jobs = [{"职位": i.title.text, "公司": "WWR", "来源": "WWR", "链接": i.link.text} for i in items]
         print(f"DEBUG: WWR 成功获取 {len(jobs)} 条")
         return jobs
@@ -37,8 +38,8 @@ def scrape_working_nomads():
     print(">>> 正在启动 Working Nomads 抓取...")
     try:
         res = requests.get("https://www.workingnomads.com/jobsapi/rss/jobs?category=development", timeout=15)
-        soup = BeautifulSoup(res.text, 'xml')
-        items = soup.find_all('item')[:10] # 强制：只取前 10
+        soup = BeautifulSoup(res.text, 'xml') # 同样确保这里能用 xml
+        items = soup.find_all('item')[:10]
         jobs = [{"职位": i.title.text, "公司": "WorkingNomads", "来源": "WN", "链接": i.link.text} for i in items]
         print(f"DEBUG: WN 成功获取 {len(jobs)} 条")
         return jobs
