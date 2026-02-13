@@ -6,15 +6,14 @@ import os, re, time
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
-# --- 抓取函数：每个都强制只返回前 10 个 ---
-
 def scrape_remote_ok():
     print("正在抓取 Remote OK...")
     try:
         res = requests.get("https://remoteok.com/api", headers=HEADERS, timeout=15)
         data = res.json()
         jobs = []
-        for item in data[1:11]: # 只取 API 返回的前 10 个有效职位
+        # 强制切片 data[1:11]，确保只取前10条
+        for item in data[1:11]: 
             jobs.append({
                 "职位": item.get('position', 'N/A'),
                 "公司": item.get('company', 'N/A'),
@@ -31,7 +30,7 @@ def scrape_wwr():
         soup = BeautifulSoup(res.text, 'xml')
         items = soup.find_all('item')
         jobs = []
-        for item in items[:10]: # 强制限制 10 条
+        for item in items[:10]: # 限制 10 条
             jobs.append({
                 "职位": item.title.text.strip(),
                 "公司": "WWR",
@@ -48,7 +47,7 @@ def scrape_working_nomads():
         soup = BeautifulSoup(res.text, 'xml')
         items = soup.find_all('item')
         jobs = []
-        for item in items[:10]: # 强制限制 10 条
+        for item in items[:10]: # 限制 10 条
             jobs.append({
                 "职位": item.title.text.strip(),
                 "公司": "WorkingNomads",
@@ -58,14 +57,12 @@ def scrape_working_nomads():
         return jobs
     except: return []
 
-# --- 统一更新逻辑 ---
-
 def save_and_update(all_jobs):
     if not all_jobs: return
     
-    # 转换为 DataFrame 并整理
+    # 转换为 DataFrame
     df = pd.DataFrame(all_jobs)
-    # 只保留这几列，让表格在手机端看也不挤
+    # 强制只显示以下四列，防止表格过宽
     df = df[["职位", "公司", "来源", "链接"]] 
     
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -78,7 +75,7 @@ def save_and_update(all_jobs):
     else:
         df.to_excel(file_name, sheet_name=today_str, index=False)
 
-    # B. 更新 README (使用正则彻底替换)
+    # B. 更新 README (核心正则替换)
     if os.path.exists("README.md"):
         with open("README.md", "r", encoding="utf-8") as f:
             content = f.read()
@@ -87,17 +84,18 @@ def save_and_update(all_jobs):
         start_tag, end_tag = "", ""
         
         if start_tag in content and end_tag in content:
+            # 使用 re.DOTALL 确保跨行匹配，把旧的 300 多行一次性干掉
             pattern = re.compile(f"{re.escape(start_tag)}.*?{re.escape(end_tag)}", re.DOTALL)
-            new_block = f"{start_tag}\n\n### 📅 本次聚合最新职位 ({today_str})\n\n{md_table}\n\n{end_tag}"
+            new_block = f"{start_tag}\n\n### 📅 本次精选职位 ({today_str})\n\n{md_table}\n\n{end_tag}"
             updated_content = pattern.sub(new_block, content)
             
             with open("README.md", "w", encoding="utf-8") as f:
                 f.write(updated_content)
-        print(f"✅ 汇总完成，总计展示 {len(all_jobs)} 条精选职位")
+        print(f"✅ 更新完成，总计展示 {len(all_jobs)} 条各来源精选职位")
 
 if __name__ == "__main__":
     combined = []
-    # 依次添加，如果某个站挂了，也不影响别的站
+    # 建议把 RemoteOK 放在最后，让 WWR 和 WN 优先展示
     combined += scrape_wwr()
     combined += scrape_working_nomads()
     combined += scrape_remote_ok()
