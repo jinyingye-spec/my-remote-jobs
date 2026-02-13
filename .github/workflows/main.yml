@@ -23,8 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 pandas openpyxl tabulate  # --- 关键修改 2: 增加 tabulate ---
-
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 pandas openpyxl tabulate lxml
+          
       - name: Run scraper
         run: python fetch_jobs.py
 
